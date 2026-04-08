@@ -1,0 +1,14 @@
+{
+  "name": "cors-vulnerability-demo",
+  "version": "1.0.0",
+  "description": "Educational demo of common CORS misconfigurations",
+  "scripts": {
+    "start": "node start.js",
+    "server": "node vulnerable-server/server.js",
+    "legit":  "node legitimate-site/server.js",
+    "attacker": "node attacker-site/server.js"
+  },
+  "engines": {
+    "node": ">=14"
+  }
+}

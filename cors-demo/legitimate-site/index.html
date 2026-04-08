@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Legitimate Site (Port 3002)</title>
+  <style>
+    body { font-family: monospace; max-width: 800px; margin: 40px auto; background: #0d1117; color: #c9d1d9; padding: 20px; }
+    h1   { color: #58a6ff; }
+    h2   { color: #79c0ff; margin-top: 30px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+    .legit  { background: #1f6feb; color: #fff; }
+    button  { background: #238636; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; margin: 4px; font-family: monospace; }
+    button:hover { background: #2ea043; }
+    pre    { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 16px; white-space: pre-wrap; word-break: break-all; }
+    .ok    { color: #3fb950; }
+    .error { color: #f85149; }
+    .info  { color: #d29922; }
+    .url   { color: #58a6ff; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1><span class="badge legit">LEGITIMATE SITE</span> — http://localhost:3002</h1>
+  <p>This is the <strong>authorized</strong> origin. Both vulnerable and secure endpoints respond to requests from here.</p>
+
+  <h2>Secure endpoint (whitelist-only)</h2>
+  <p class="url">GET http://localhost:3001/api/data-secure</p>
+  <button onclick="fetchData('secure')">Fetch /api/data-secure</button>
+  <pre id="out-secure">Click the button...</pre>
+
+  <h2>Vulnerable endpoint (reflect — also works from here)</h2>
+  <p class="url">GET http://localhost:3001/api/data-reflect</p>
+  <button onclick="fetchData('reflect')">Fetch /api/data-reflect</button>
+  <pre id="out-reflect">Click the button...</pre>
+
+  <script>
+    async function fetchData(endpoint) {
+      const el = document.getElementById('out-' + endpoint);
+      el.className = 'info';
+      el.textContent = 'Fetching...';
+      try {
+        const res = await fetch('http://localhost:3001/api/data-' + endpoint, {
+          credentials: 'include',
+        });
+        const data = await res.json();
+        el.className = 'ok';
+        el.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        el.className = 'error';
+        el.textContent = 'ERROR: ' + err.message;
+      }
+    }
+  </script>
+</body>
+</html>
