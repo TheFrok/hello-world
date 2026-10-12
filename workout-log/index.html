@@ -311,7 +311,11 @@
 
   .output-wrap{display:none;}
   .output-wrap.show{display:block;}
-  pre#output{
+  textarea#output{
+    display:block;
+    width:100%;
+    resize:vertical;
+    color:var(--ink);
     font-family:'IBM Plex Mono', ui-monospace, monospace;
     font-size:.83rem;
     line-height:1.55;
@@ -472,14 +476,15 @@
   </section>
 
   <div class="actions">
-    <button type="button" class="primary" id="genBtn">Generate and save</button>
+    <button type="button" class="primary" id="genBtn">Generate log</button>
   </div>
 
   <div class="output-wrap card" id="outputWrap">
-    <label class="field-label">Ready to paste <span class="copied-flag" id="copiedFlag">copied</span></label>
-    <pre id="output"></pre>
+    <label class="field-label" for="output">Log, edit freely before copying or saving <span class="copied-flag" id="copiedFlag">copied</span></label>
+    <textarea id="output" spellcheck="false"></textarea>
     <div class="actions">
       <button type="button" class="secondary" id="copyBtn">Copy</button>
+      <button type="button" class="secondary" id="saveBtn">Save to history</button>
     </div>
     <div class="paste-status ok" id="savedStatus"></div>
   </div>
@@ -824,6 +829,12 @@
   function copyText(text, onDone, selectEl){
     function fallback(){
       if (!selectEl) return;
+      if (selectEl.select){
+        selectEl.focus();
+        selectEl.select();
+        try{ document.execCommand('copy'); onDone(); }catch(e){}
+        return;
+      }
       var range = document.createRange();
       range.selectNodeContents(selectEl);
       var sel = window.getSelection();
@@ -858,10 +869,17 @@
 
   function addToHistory(text){
     var iso = dateInput.value || todayLocalISO();
-    var key = iso+'|'+state.dayKey;
+    var dayKey = state.dayKey;
+    var dm = text.trim().match(/^(\d{2})\.(\d{2})\.(\d{2})\s+([A-Za-z]+)/);
+    if (dm){
+      iso = '20'+dm[3]+'-'+dm[2]+'-'+dm[1];
+      var idx = WEEKDAY.map(function(w){ return w.toLowerCase(); }).indexOf(dm[4].slice(0,3).toLowerCase());
+      if (idx >= 0) dayKey = DAY_KEYS[idx];
+    }
+    var key = iso+'|'+dayKey;
     var h = loadHistory().filter(function(e){ return e.key !== key; });
     var replaced = h.length < loadHistory().length;
-    h.push({ key:key, iso:iso, dayKey:state.dayKey, text:text, savedAt:Date.now() });
+    h.push({ key:key, iso:iso, dayKey:dayKey, text:text, savedAt:Date.now() });
     var ok = saveHistory(h);
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function(){});
     renderHistory();
@@ -960,18 +978,33 @@
   });
 
   $('genBtn').addEventListener('click', function(){
-    var text = buildOutput();
-    output.textContent = text;
-    savedStatus.textContent = addToHistory(text);
+    output.value = buildOutput();
+    savedStatus.textContent = '';
     outputWrap.classList.add('show');
+    fitOutput();
     outputWrap.scrollIntoView({ behavior:'smooth', block:'nearest' });
   });
 
   $('copyBtn').addEventListener('click', function(){
-    copyText(output.textContent, function(){
+    copyText(output.value, function(){
       copiedFlag.classList.add('show');
       setTimeout(function(){ copiedFlag.classList.remove('show'); }, 1400);
     }, output);
+  });
+
+  function fitOutput(){
+    output.style.height = 'auto';
+    output.style.height = (output.scrollHeight + 2) + 'px';
+  }
+  output.addEventListener('input', function(){
+    fitOutput();
+    savedStatus.textContent = '';
+  });
+
+  $('saveBtn').addEventListener('click', function(){
+    var text = output.value.trim();
+    if (!text){ savedStatus.textContent = 'The log is empty. Generate it first.'; return; }
+    savedStatus.textContent = addToHistory(text);
   });
 
   // ---- parsing a pasted log ----
