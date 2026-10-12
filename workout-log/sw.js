@@ -1,4 +1,4 @@
-const CACHE = 'split-log-v3';
+const CACHE = 'split-log-v4';
 const APP_SHELL = [
   './',
   './index.html',
