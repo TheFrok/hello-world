@@ -225,9 +225,6 @@
     color:var(--ink);
   }
   .ex-rounds{display:flex; gap:6px; flex-wrap:wrap;}
-  .pair-round{display:inline-flex; align-items:center; gap:2px;}
-  .pair-round input{width:38px !important;}
-  .pair-plus{color:var(--muted); font-size:.8rem; font-family:'IBM Plex Mono', ui-monospace, monospace;}
   .ex-rounds input{
     width:44px;
     text-align:center;
@@ -551,7 +548,7 @@
       {id:'inclinepress', tag:'1', name:'Incline dumbbell press', hint:'10-15', detailPh:'palms facing, 12 kg', rest:'90 s between sets'},
       {id:'chestrow', tag:'A1', name:'Chest-supported dumbbell row', hint:'10-15', detailPh:'', rest:'30 s, then A2'},
       {id:'lateralraise', tag:'A2', name:'Dumbbell lateral raise', hint:'12-15', detailPh:'light', rest:'60 s, then A1 · 90 s after the last round'},
-      {id:'assistedpullup', tag:'B1', name:'Assisted pull-ups', hint:'8-10 total · clean+assisted', detailPh:'half is 45kg lat pulldown', pair:true, rest:'30 s, then B2'},
+      {id:'assistedpullup', tag:'B1', name:'Assisted pull-ups', hint:'8-10 total', detailPh:'half is 45kg lat pulldown', rest:'30 s, then B2'},
       {id:'facepull', tag:'B2', name:'Cable face pull', hint:'15', detailPh:'rope', rest:'60 s, then B1'}
     ]},
     thu: { label:'Thu', title:'Lower B + triceps', sub:'', home:false, header:'Weights', rest:GYM_REST, exercises:[
@@ -657,23 +654,6 @@
     return inp;
   }
 
-  function roundValue(el){
-    if (el.tagName === 'INPUT') return el.value.trim();
-    var parts = el.querySelectorAll('input');
-    var a = parts[0].value.trim(), b = parts[1].value.trim();
-    if (a && b) return a+'+'+b;
-    if (b) return '0+'+b;
-    return a;
-  }
-
-  function setRoundValue(el, v){
-    if (el.tagName === 'INPUT'){ el.value = v; return; }
-    var parts = el.querySelectorAll('input');
-    var bits = v.split('+');
-    parts[0].value = bits[0] ? bits[0].trim() : '';
-    parts[1].value = bits[1] ? bits[1].trim() : '';
-  }
-
   function renderList(listEl, exercises, rounds){
     listEl.innerHTML = '';
     exercises.forEach(function(ex){
@@ -752,23 +732,6 @@
       roundsWrap.className = 'ex-rounds';
       var count = ex.single ? 1 : rounds;
       for (var i=0;i<count;i++){
-        if (ex.pair){
-          var pairEl = document.createElement('span');
-          pairEl.className = 'pair-round';
-          pairEl.dataset.role = 'round';
-          var clean = numberInput(String(i+1));
-          clean.setAttribute('aria-label', 'Round '+(i+1)+' clean reps');
-          var assisted = numberInput('');
-          assisted.setAttribute('aria-label', 'Round '+(i+1)+' assisted reps');
-          var plus = document.createElement('span');
-          plus.className = 'pair-plus';
-          plus.textContent = '+';
-          pairEl.appendChild(clean);
-          pairEl.appendChild(plus);
-          pairEl.appendChild(assisted);
-          roundsWrap.appendChild(pairEl);
-          continue;
-        }
         var inp = numberInput(ex.single ? ex.hint + unitSuffix(ex.unit) : String(i+1));
         inp.dataset.role = 'round';
         if (ex.single) inp.className = 'single';
@@ -830,7 +793,7 @@
       var unit = row.dataset.exUnit;
       var vals = [];
       row.querySelectorAll('[data-role="round"]').forEach(function(r){
-        var v = roundValue(r);
+        var v = r.value.trim();
         if (v === '') return;
         if (unit) v = v + unitSuffix(unit);
         vals.push(v);
@@ -1090,7 +1053,10 @@
       store('splitlog_detail_'+m.ex.id, m.parsed.detail);
     }
     var roundEls = row.querySelectorAll('[data-role="round"]');
-    m.parsed.values.forEach(function(v, i){ if (roundEls[i]) setRoundValue(roundEls[i], v); });
+    m.parsed.values.forEach(function(v, i){
+      var n = parseFloat(v);
+      if (roundEls[i] && !isNaN(n)) roundEls[i].value = String(n);
+    });
     var sideEl = row.querySelector('[data-role="eachside"]');
     if (sideEl && m.parsed.eachSide) sideEl.checked = true;
   }
